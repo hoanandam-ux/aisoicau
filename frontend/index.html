@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SSAE · Sequence Analysis Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<style>
+/* ── Reset & tokens ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #080b10;
+  --surface:  #0d1117;
+  --card:     #111820;
+  --border:   #1e2d3d;
+  --accent:   #00d4ff;
+  --accent2:  #7b61ff;
+  --high:     #00ffaa;
+  --low:      #ff4d6d;
+  --text:     #e2e8f0;
+  --muted:    #4a5568;
+  --mono:     'Space Mono', monospace;
+  --sans:     'Syne', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Grid noise texture ─────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none; z-index: 0;
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+header {
+  position: relative; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.25rem 2.5rem;
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  display: flex; align-items: center; gap: .75rem;
+}
+.logo-mark {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: pulse-hex 3s ease-in-out infinite;
+}
+@keyframes pulse-hex {
+  0%,100% { filter: drop-shadow(0 0 6px var(--accent)); }
+  50%      { filter: drop-shadow(0 0 18px var(--accent)); }
+}
+.logo-text { font-size: 1.1rem; font-weight: 800; letter-spacing: .12em; }
+.logo-text span { color: var(--accent); }
+
+.badge {
+  font-family: var(--mono); font-size: .65rem;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  border: 1px solid var(--border); padding: .25rem .75rem; border-radius: 2rem;
+}
+
+/* ── Main layout ────────────────────────────────────────────────── */
+main {
+  position: relative; z-index: 1;
+  max-width: 1200px; margin: 0 auto;
+  padding: 3rem 2rem;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+}
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+/* ── Cards ──────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.card-header {
+  padding: .875rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: .625rem;
+  font-size: .7rem; font-weight: 600; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--muted);
+}
+.card-header .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); animation: blink 1.6s ease-in-out infinite;
+}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .2; } }
+
+/* ── Drop zone ──────────────────────────────────────────────────── */
+#dropzone {
+  min-height: 260px;
+  margin: 1.5rem;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1rem;
+  cursor: pointer; transition: border-color .25s, background .25s;
+  position: relative; overflow: hidden;
+}
+#dropzone:hover, #dropzone.drag-over {
+  border-color: var(--accent);
+  background: rgba(0,212,255,.04);
+}
+#dropzone .icon {
+  width: 56px; height: 56px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+  transition: border-color .25s;
+}
+#dropzone:hover .icon { border-color: var(--accent); }
+#dropzone p { font-size: .85rem; color: var(--muted); text-align: center; }
+#dropzone p strong { color: var(--text); }
+#dropzone input { display: none; }
+
+#preview-img {
+  display: none;
+  width: 100%; height: 100%;
+  position: absolute; inset: 0;
+  object-fit: cover; opacity: .7;
+  border-radius: 6px;
+}
+#preview-img.visible { display: block; }
+
+/* ── Btn ────────────────────────────────────────────────────────── */
+#analyze-btn {
+  display: block; width: calc(100% - 3rem);
+  margin: 0 1.5rem 1.5rem;
+  padding: .875rem;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  color: #000; font-family: var(--mono); font-size: .8rem;
+  font-weight: 700; letter-spacing: .12em;
+  border: none; border-radius: 8px; cursor: pointer;
+  transition: opacity .2s, transform .15s;
+}
+#analyze-btn:hover { opacity: .9; }
+#analyze-btn:active { transform: scale(.98); }
+#analyze-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── Loading bar ────────────────────────────────────────────────── */
+#progress-bar {
+  height: 2px; background: transparent;
+  transition: background .3s;
+  margin: 0 1.5rem .5rem;
+  border-radius: 2px; overflow: hidden;
+}
+#progress-bar.active {
+  background: var(--border);
+  animation: progress-sweep 1.5s linear infinite;
+  background-image: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  background-size: 200% 100%;
+}
+@keyframes progress-sweep { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* ── Results panel ──────────────────────────────────────────────── */
+.results-col { display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* Prediction hero */
+.pred-hero {
+  padding: 1.75rem 1.5rem;
+  text-align: center; position: relative;
+}
+.pred-label {
+  font-size: .65rem; letter-spacing: .2em; color: var(--muted);
+  text-transform: uppercase; margin-bottom: .5rem;
+}
+.pred-value {
+  font-size: 3.5rem; font-weight: 800; line-height: 1;
+  transition: color .4s;
+}
+.pred-value.high { color: var(--high); text-shadow: 0 0 40px var(--high); }
+.pred-value.low  { color: var(--low);  text-shadow: 0 0 40px var(--low); }
+
+.confidence-bar-wrap {
+  margin-top: 1.25rem;
+  display: flex; align-items: center; gap: .75rem;
+}
+.confidence-bar-track {
+  flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
+}
+.confidence-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  transition: width .6s cubic-bezier(.22,1,.36,1);
+  width: 0%;
+}
+.confidence-pct { font-family: var(--mono); font-size: .8rem; color: var(--accent); min-width: 3rem; text-align: right; }
+
+/* Probability pills */
+.prob-row {
+  display: flex; gap: .75rem; padding: 0 1.5rem 1.5rem;
+}
+.prob-pill {
+  flex: 1; padding: .75rem 1rem;
+  border: 1px solid var(--border); border-radius: 8px;
+  text-align: center;
+}
+.prob-pill .pill-label { font-size: .6rem; letter-spacing: .15em; color: var(--muted); text-transform: uppercase; }
+.prob-pill .pill-value { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; margin-top: .25rem; }
+.prob-pill.h .pill-value { color: var(--high); }
+.prob-pill.l .pill-value { color: var(--low); }
+
+/* Pattern badge */
+.pattern-block { padding: 1rem 1.5rem; }
+.pattern-badge {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .375rem .875rem; border-radius: 2rem;
+  font-family: var(--mono); font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  border: 1px solid;
+}
+.pattern-badge.streak    { color: #f59e0b; border-color: #f59e0b33; background: #f59e0b11; }
+.pattern-badge.alternating { color: var(--accent2); border-color: #7b61ff33; background: #7b61ff11; }
+.pattern-badge.symmetry  { color: var(--accent);   border-color: #00d4ff33; background: #00d4ff11; }
+.pattern-badge.mixed     { color: #e879f9;          border-color: #e879f933; background: #e879f911; }
+.pattern-badge.none      { color: var(--muted);     border-color: var(--border); }
+.pattern-desc { margin-top: .625rem; font-size: .82rem; color: var(--muted); }
+
+/* Sequence tape */
+.seq-tape {
+  display: flex; flex-wrap: nowrap; gap: 4px;
+  padding: 1rem 1.5rem;
+  overflow-x: auto; scrollbar-width: none;
+}
+.seq-tape::-webkit-scrollbar { display: none; }
+.seq-cell {
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: .65rem; font-weight: 700;
+  border: 1px solid;
+  animation: pop-in .25s ease backwards;
+}
+.seq-cell.h { color: var(--high); border-color: #00ffaa44; background: #00ffaa11; }
+.seq-cell.l { color: var(--low);  border-color: #ff4d6d44; background: #ff4d6d11; }
+
+@keyframes pop-in {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* Stats grid */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem;
+  padding: 1rem 1.5rem 1.5rem;
+}
+.stat-item { text-align: center; }
+.stat-item .sv {
+  font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--accent);
+}
+.stat-item .sk { font-size: .62rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-top: .2rem; }
+
+/* Model chips */
+.model-chips {
+  display: flex; flex-wrap: wrap; gap: .5rem;
+  padding: .75rem 1.5rem 1.25rem;
+}
+.chip {
+  font-family: var(--mono); font-size: .65rem;
+  padding: .25rem .625rem; border-radius: .25rem;
+  background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+}
+.chip strong { color: var(--text); }
+
+/* Empty state */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: .75rem;
+  padding: 4rem 2rem; text-align: center; color: var(--muted);
+}
+.empty-state .big { font-size: 2.5rem; opacity: .3; }
+.empty-state p { font-size: .85rem; }
+
+/* Error toast */
+#error-box {
+  display: none;
+  margin: 0 1.5rem .5rem;
+  padding: .875rem 1.25rem;
+  background: #ff4d6d18; border: 1px solid #ff4d6d44;
+  border-radius: 8px; color: var(--low);
+  font-size: .8rem; font-family: var(--mono);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark"></div>
+    <span class="logo-text">SS<span>AE</span></span>
+  </div>
+  <span class="badge">VIP · AI Analytics Platform</span>
+</header>
+
+<main>
+  <!-- ── LEFT: Upload ─────────────────────────────────────── -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="dot"></span>
+        Image Input · Vision Pipeline
+      </div>
+
+      <div id="dropzone">
+        <img id="preview-img" alt="preview"/>
+        <div class="icon">📷</div>
+        <p><strong>Drop screenshot here</strong><br/>or click to browse</p>
+        <p style="font-size:.7rem">JPEG · PNG · WebP supported</p>
+        <input type="file" id="file-input" accept="image/*"/>
+      </div>
+
+      <div id="error-box"></div>
+      <div id="progress-bar"></div>
+
+      <button id="analyze-btn" disabled>ANALYZE SEQUENCE →</button>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: Results ──────────────────────────────────── -->
+  <div class="results-col" id="results-col">
+
+    <!-- Prediction hero -->
+    <div class="card" id="pred-card">
+      <div class="card-header">
+        <span class="dot"></span>
+        Next Outcome Prediction
+      </div>
+      <div id="results-content">
+        <div class="empty-state">
+          <div class="big">◈</div>
+          <p>Upload a screenshot to begin analysis</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+/* ── State ──────────────────────────────────────────────── */
+let selectedFile = null;
+
+/* ── DOM refs ───────────────────────────────────────────── */
+const dropzone    = document.getElementById('dropzone');
+const fileInput   = document.getElementById('file-input');
+const previewImg  = document.getElementById('preview-img');
+const analyzeBtn  = document.getElementById('analyze-btn');
+const progressBar = document.getElementById('progress-bar');
+const errorBox    = document.getElementById('error-box');
+const resultsCont = document.getElementById('results-content');
+
+/* ── Drag & Drop ────────────────────────────────────────── */
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  selectedFile = f;
+  const url = URL.createObjectURL(f);
+  previewImg.src = url;
+  previewImg.classList.add('visible');
+  analyzeBtn.disabled = false;
+  hideError();
+}
+
+/* ── Analyze ────────────────────────────────────────────── */
+analyzeBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  setLoading(true);
+  hideError();
+
+  const fd = new FormData();
+  fd.append('image', selectedFile);
+
+  try {
+    const res = await fetch('/analyze', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Server error');
+    renderResults(data);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+/* ── Render results ─────────────────────────────────────── */
+function renderResults(d) {
+  const p = d.prediction;
+  const pat = d.pattern;
+  const ext = d.extraction;
+  const stats = d.statistics;
+
+  const isHigh = p.next_outcome === 'High';
+  const confPct = Math.round(p.confidence * 100);
+  const probHighPct = Math.round(p.probability_high * 100);
+  const probLowPct  = Math.round((1 - p.probability_high) * 100);
+
+  /* Sequence tape */
+  const tape = ext.labels_window.map((l, i) => {
+    const delay = (i * 30) + 'ms';
+    return `<div class="seq-cell ${l.toLowerCase()}" style="animation-delay:${delay}">${l}</div>`;
+  }).join('');
+
+  /* Pattern badge */
+  const ptMap = { streak:'🔥 Streak', alternating:'⚡ Alternating', symmetry:'◈ Symmetry', mixed:'✦ Mixed', none:'— None' };
+  const ptLabel = ptMap[pat.type] || pat.type;
+
+  /* Model chips */
+  const chips = Object.entries(p.model_components || {}).map(([k, v]) =>
+    `<div class="chip">${k}: <strong>${Math.round(v*100)}%</strong></div>`
+  ).join('');
+
+  resultsCont.innerHTML = `
+    <!-- Prediction hero -->
+    <div class="pred-hero">
+      <div class="pred-label">Next Outcome</div>
+      <div class="pred-value ${isHigh?'high':'low'}">${p.next_outcome.toUpperCase()}</div>
+      <div class="confidence-bar-wrap">
+        <span style="font-size:.65rem;color:var(--muted);white-space:nowrap">Confidence</span>
+        <div class="confidence-bar-track">
+          <div class="confidence-bar-fill" id="conf-fill"></div>
+        </div>
+        <span class="confidence-pct">${confPct}%</span>
+      </div>
+    </div>
+
+    <!-- Prob pills -->
+    <div class="prob-row">
+      <div class="prob-pill h">
+        <div class="pill-label">High</div>
+        <div class="pill-value">${probHighPct}%</div>
+      </div>
+      <div class="prob-pill l">
+        <div class="pill-label">Low</div>
+        <div class="pill-value">${probLowPct}%</div>
+      </div>
+    </div>
+
+    <!-- Pattern -->
+    <div class="card" style="border-top:1px solid var(--border)">
+      <div class="card-header"><span class="dot"></span>Pattern Recognition</div>
+      <div class="pattern-block">
+        <span class="pattern-badge ${pat.type}">${ptLabel}</span>
+        <p class="pattern-desc">${pat.description}</p>
+      </div>
+    </div>
+
+    <!-- Sequence tape -->
+    <div class="card">
+      <div class="card-header"><span class="dot"></span>Sequence Window (last ${ext.labels_window.length})</div>
+      <div class="seq-tape">${tape}</div>
+    </div>
+
+    <!-- Stats -->
+    <div class="card">
+      <div class="card-header"><span class="dot"></span>Session Statistics</div>
+      <div class="stats-grid">
+        <div class="stat-item"><div class="sv">${stats.mean}</div><div class="sk">Mean</div></div>
+        <div class="stat-item"><div class="sv">${stats.std}</div><div class="sk">Std Dev</div></div>
+        <div class="stat-item"><div class="sv">${Math.round(stats.high_ratio*100)}%</div><div class="sk">High Ratio</div></div>
+        <div class="stat-item"><div class="sv">${stats.min}</div><div class="sk">Min</div></div>
+        <div class="stat-item"><div class="sv">${stats.max}</div><div class="sk">Max</div></div>
+        <div class="stat-item"><div class="sv">${ext.ocr_confidence ? Math.round(ext.ocr_confidence*100)+'%' : 'N/A'}</div><div class="sk">OCR Conf</div></div>
+      </div>
+    </div>
+
+    <!-- Models -->
+    <div class="card">
+      <div class="card-header"><span class="dot"></span>Model Ensemble · ${p.model_used}</div>
+      <div class="model-chips">${chips || '<span style="font-size:.75rem;color:var(--muted)">No component data</span>'}</div>
+      <div style="padding:0 1.5rem .875rem;font-family:var(--mono);font-size:.65rem;color:var(--muted)">
+        Processed in ${d.processing_time_ms}ms · ${ext.total_values_found} values extracted
+      </div>
+    </div>
+  `;
+
+  /* Animate confidence bar */
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const fill = document.getElementById('conf-fill');
+      if (fill) fill.style.width = confPct + '%';
+    });
+  });
+}
+
+/* ── Helpers ────────────────────────────────────────────── */
+function setLoading(on) {
+  analyzeBtn.disabled = on;
+  analyzeBtn.textContent = on ? 'ANALYZING…' : 'ANALYZE SEQUENCE →';
+  progressBar.className = on ? 'active' : '';
+  progressBar.id = 'progress-bar';
+}
+function showError(msg) {
+  errorBox.style.display = 'block';
+  errorBox.textContent = '⚠ ' + msg;
+}
+function hideError() {
+  errorBox.style.display = 'none';
+}
+</script>
+</body>
+</html>
