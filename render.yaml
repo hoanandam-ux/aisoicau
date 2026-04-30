@@ -1,33 +1,23 @@
 services:
   - type: web
     name: ssae-api
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: standard           # use "starter" for free tier (single worker, slower cold start)
+    runtime: python
+    pythonVersion: "3.11.9"
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2
+    plan: standard
     region: singapore        # change to: oregon | frankfurt | ohio | virginia
 
-    # ── Environment ──────────────────────────────────────────────────────────
     envVars:
-      - key: PORT
-        value: "8000"
       - key: PYTHONUNBUFFERED
         value: "1"
-      # Uncomment to persist EasyOCR model cache across deploys
-      # - key: EASYOCR_MODULE_PATH
-      #   value: /data/.EasyOCR
+      - key: PORT
+        value: "8000"
 
-    # ── Health check ─────────────────────────────────────────────────────────
     healthCheckPath: /health
 
-    # ── Autoscaling (standard plan) ──────────────────────────────────────────
     scaling:
       minInstances: 1
       maxInstances: 3
       targetMemoryPercent: 80
       targetCPUPercent: 75
-
-    # ── Persistent disk for model cache (optional, recommended) ──────────────
-    # disk:
-    #   name: ssae-model-cache
-    #   mountPath: /data
-    #   sizeGB: 5
