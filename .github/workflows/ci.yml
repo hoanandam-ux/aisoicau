@@ -1,0 +1,53 @@
+name: CI – SSAE
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install lightweight test deps
+        run: |
+          pip install --upgrade pip
+          # Install without TF for speed; predictor falls back gracefully
+          pip install \
+            fastapi uvicorn httpx python-multipart \
+            easyocr opencv-python-headless Pillow \
+            numpy scikit-learn hmmlearn \
+            pytest pytest-asyncio
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t ssae:${{ github.sha }} .
+
+      - name: Smoke test container
+        run: |
+          docker run -d --name ssae-test -p 8000:8000 ssae:${{ github.sha }}
+          sleep 20
+          curl --fail http://localhost:8000/health || (docker logs ssae-test && exit 1)
+          docker stop ssae-test
