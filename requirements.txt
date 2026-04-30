@@ -9,12 +9,12 @@ opencv-python-headless==4.10.0.84
 Pillow==11.1.0
 
 # ── AI / ML ───────────────────────────────────────────────────────
-numpy==2.2.3
+# numpy PHẢI <2.1.0 vì tensorflow-cpu==2.18.0 yêu cầu numpy>=1.26.0,<2.1.0
+numpy==2.0.2
 scikit-learn==1.6.1
 hmmlearn==0.3.3
 
-# TensorFlow – comment out for a lighter build
-# (LSTM falls back to HMM + NaiveBayes automatically if absent)
+# tensorflow-cpu: dùng 2.18.0 yêu cầu numpy<2.1.0 (đã fix ở trên)
 tensorflow-cpu==2.18.0
 
 # ── Utilities ─────────────────────────────────────────────────────
