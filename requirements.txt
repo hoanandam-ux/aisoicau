@@ -1,21 +1,21 @@
 # ── Web framework ─────────────────────────────────────────────────
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-python-multipart==0.0.9
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
 
 # ── Vision / OCR ──────────────────────────────────────────────────
-easyocr==1.7.1
-opencv-python-headless==4.9.0.80   # headless: no GUI deps (safe on Render)
-Pillow==10.3.0
+easyocr==1.7.2
+opencv-python-headless==4.10.0.84
+Pillow==11.1.0
 
 # ── AI / ML ───────────────────────────────────────────────────────
-numpy==1.26.4
-scikit-learn==1.4.2
-hmmlearn==0.3.2
+numpy==2.2.3
+scikit-learn==1.6.1
+hmmlearn==0.3.3
 
-# TensorFlow – comment out if you need a very lightweight build
-# (LSTM falls back to NB+HMM automatically if TF is absent)
-tensorflow-cpu==2.16.1    # CPU-only build: smaller, Render-compatible
+# TensorFlow – comment out for a lighter build
+# (LSTM falls back to HMM + NaiveBayes automatically if absent)
+tensorflow-cpu==2.18.0
 
 # ── Utilities ─────────────────────────────────────────────────────
 python-dotenv==1.0.1
